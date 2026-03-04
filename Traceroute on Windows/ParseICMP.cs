@@ -8,33 +8,45 @@ namespace Traceroute_on_Windows
 {
     static class ParseICMP
     {
-        public static bool IsResponseForProbe(byte[] packet, int lengthPacket, int expectedDestPort, IPAddress expectedDestAddr)
+        public static bool TryParse(byte[] buffer, int length, ushort id, out IPAddress responder, out bool reached)
         {
-            if (lengthPacket < 28) return false;
-            
-            int ipHeaderLen = (packet[0] & 0x0F) * 4;
-            if (lengthPacket < ipHeaderLen + 8) return false;
+            responder = null;
+            reached = false;
+
+            if (length < 20)
+                return false;
+
+            int ipHeaderLen = (buffer[0] & 0x0F) * 4;
+            if (length < ipHeaderLen + 8)
+                return false;
 
             int icmpOffset = ipHeaderLen;
-            byte icmpType = packet[icmpOffset];
-            if (icmpType != 11 && icmpType != 3) return false;
+            byte type = buffer[icmpOffset];
 
-            int innerIpOffset = icmpOffset + 8;
-            if (innerIpOffset + 20 > lengthPacket) return false;
+            if (type == 11)
+            {
+                responder = new IPAddress(new byte[]
+                {
+                    buffer[12], buffer[13], buffer[14], buffer[15]
+                });
+                return true;
+            }
 
-            byte[] innerDestAddrBytes = new byte[4];
-            Array.Copy(packet, innerIpOffset + 16, innerDestAddrBytes, 0, 4);
-            IPAddress innerDestAddr = new IPAddress(innerDestAddrBytes);
-            if (!innerDestAddr.Equals(expectedDestAddr)) return false;
+            if (type == 0)
+            {
+                ushort replyId = (ushort)((buffer[icmpOffset + 4] << 8) | buffer[icmpOffset + 5]);
+                if (replyId == id)
+                {
+                    responder = new IPAddress(new byte[]
+                    {
+                        buffer[12], buffer[13], buffer[14], buffer[15]
+                    });
+                    reached = true;
+                    return true;
+                }
+            }
 
-            byte innerProtocol = packet[innerIpOffset + 9];
-            if (innerProtocol != 17) return false;
-
-            int innerUdpOffset = innerIpOffset + ((packet[innerIpOffset] & 0x0F) * 4);
-            if (innerUdpOffset + 2 > lengthPacket) return false;
-
-            int innerDestPort = (packet[innerUdpOffset] << 8) | packet[innerUdpOffset + 1];
-            return innerDestPort == expectedDestPort;
+            return false;
         }
     }
 }

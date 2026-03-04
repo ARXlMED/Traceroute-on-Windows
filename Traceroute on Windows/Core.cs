@@ -9,88 +9,70 @@ namespace Traceroute_on_Windows
 {
     internal class Core : IDisposable
     {
-        private const int standartPortUDP = 33434;
-        private const int maxTTL = 30;
-        private const int probesForOneTTL = 3;
+        private readonly IPAddress _destination;
+        private Socket _socket;
+        private const int MaxHops = 30;
+        private const int Timeout = 4000;
 
-        private Socket icmpSocket;
-        private Socket udpSocket;
-        private EndPoint remoteNowEndPoint;
-        private IPEndPoint finalPoint;
-
-        private byte[] buffer;
-        public Core(IPAddress finalIP) 
+        public Core(IPAddress destination)
         {
-            ChangeDestinition(finalIP);
-            udpSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            icmpSocket = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Icmp);
+            _destination = destination;
 
-            icmpSocket.ReceiveTimeout = 3000;
-            icmpSocket.Bind(new IPEndPoint(IPAddress.Any, 0));
-            icmpSocket.IOControl(IOControlCode.ReceiveAll, new byte[] { 1, 0, 0, 0 }, null);
-            remoteNowEndPoint = new IPEndPoint(IPAddress.Any, 0);
+            _socket = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Icmp);
+            _socket.ReceiveTimeout = Timeout;
+            _socket.Bind(new IPEndPoint(IPAddress.Any, 0));
+        }
 
-            buffer = new byte[8192];
+        public void Run(Action<IPAddress?, long?> onHopResult)
+        {
+            ushort id = (ushort)Environment.ProcessId;
+            ushort seq = 0;
+
+            byte[] buffer = new byte[4096];
+
+            for (int ttl = 1; ttl <= MaxHops; ttl++)
+            {
+                _socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.IpTimeToLive, ttl);
+                bool reached = false;
+
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    seq++;
+
+                    Stopwatch sw = Stopwatch.StartNew();
+                    SendUDP.SendIcmp(_socket, _destination, id, seq);
+
+                    try
+                    {
+                        int received = _socket.Receive(buffer);
+                        sw.Stop();
+
+                        if (ParseICMP.TryParse(buffer, received, id, out IPAddress responder, out bool final))
+                        {
+                            onHopResult(responder, sw.ElapsedMilliseconds);
+                            if (final)
+                                reached = true;
+                        }
+                        else
+                        {
+                            onHopResult(null, null);
+                        }
+                    }
+                    catch (SocketException)
+                    {
+                        onHopResult(null, null);
+                    }
+                }
+
+                if (reached)
+                    break;
+            }
         }
 
         public void Dispose()
         {
-            udpSocket?.Dispose();
-            icmpSocket?.Dispose();
+            _socket?.Dispose();
         }
-
-        public void ChangeDestinition(IPAddress finalIP)
-        {
-            if (finalIP == null) throw new ArgumentNullException(nameof(finalIP));
-            finalPoint = new IPEndPoint(finalIP, standartPortUDP);
-        }
-
-        public void Run(Action<IPAddress?, int?> hopHandler)
-        {
-            bool reachedDestination = false;
-            for (int ttl = 1; ttl <= maxTTL; ttl++)
-            {
-                if (reachedDestination) break;
-                Console.Write($"{ttl,2}  ");
-                for (int probe = 0; probe < probesForOneTTL; probe++)
-                {
-                    int port = standartPortUDP + (ttl * probesForOneTTL) + probe;
-                    var sw = Stopwatch.StartNew();
-                    SendUDP.SendProbe(udpSocket, finalPoint.Address, port, ttl);
-                    IPAddress? responder = TryRecieveResponse(port);
-                    sw.Stop();
-                    int? rtt = responder == null ? null : (int)sw.ElapsedMilliseconds;
-                    hopHandler(responder, rtt);
-                    if (responder != null && responder.Equals(finalPoint.Address))
-                    {
-                        reachedDestination = true;
-                        break;
-                    }
-                    Thread.Sleep(100);
-                }
-                Console.WriteLine();
-            }
-        }
-
-        public IPAddress? TryRecieveResponse(int expectedPort)
-        {
-            while (true)
-            {
-                try
-                {
-                    int lengthPacket = icmpSocket.ReceiveFrom(buffer, ref remoteNowEndPoint);
-                    IPAddress responder = ((IPEndPoint)remoteNowEndPoint).Address;
-                    if (ParseICMP.IsResponseForProbe(buffer, lengthPacket, expectedPort, finalPoint.Address))
-                    {
-                        return responder;
-                    }
-
-                }
-                catch (SocketException se) when (se.SocketErrorCode == SocketError.TimedOut) 
-                {
-                    return null;
-                }
-            }
-        }
+    
     }
 }
