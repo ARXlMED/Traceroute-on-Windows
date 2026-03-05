@@ -6,15 +6,15 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v8.0": {
-      "traceroute/1.0.0": {
+      "Traceroute/1.0.0": {
         "runtime": {
-          "traceroute.dll": {}
+          "Traceroute.dll": {}
         }
       }
     }
   },
   "libraries": {
-    "traceroute/1.0.0": {
+    "Traceroute/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

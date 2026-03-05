@@ -33,8 +33,13 @@ namespace Traceroute_on_Windows
 
             try
             {
-                IPHostEntry hostEntry = Dns.GetHostEntry(target);
-                IPAddress destination = GetIPv4(hostEntry);
+                IPAddress destination;
+
+                if (!IPAddress.TryParse(target, out destination))
+                {
+                    IPHostEntry hostEntry = Dns.GetHostEntry(target);
+                    destination = GetIPv4(hostEntry);
+                }
 
                 Console.WriteLine($"Tracing route to {target} [{destination}]");
                 Console.WriteLine("over a maximum of 30 hops:\n");

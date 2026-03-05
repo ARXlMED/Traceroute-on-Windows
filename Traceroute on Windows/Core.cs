@@ -12,7 +12,7 @@ namespace Traceroute_on_Windows
         private readonly IPAddress _destination;
         private Socket _socket;
         private const int MaxHops = 30;
-        private const int Timeout = 4000;
+        private const int Timeout = 2000;
 
         public Core(IPAddress destination)
         {
@@ -28,7 +28,7 @@ namespace Traceroute_on_Windows
             ushort id = (ushort)Environment.ProcessId;
             ushort seq = 0;
 
-            byte[] buffer = new byte[4096];
+            byte[] buffer = new byte[8192];
 
             for (int ttl = 1; ttl <= MaxHops; ttl++)
             {
@@ -40,7 +40,7 @@ namespace Traceroute_on_Windows
                     seq++;
 
                     Stopwatch sw = Stopwatch.StartNew();
-                    SendUDP.SendIcmp(_socket, _destination, id, seq);
+                    SendIcmp.SendPacket(_socket, _destination, id, seq);
 
                     try
                     {

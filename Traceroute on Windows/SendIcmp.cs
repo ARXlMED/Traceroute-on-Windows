@@ -6,15 +6,15 @@ using System.Net.Sockets;
 
 namespace Traceroute_on_Windows
 {
-    static class SendUDP
+    static class SendIcmp
     {
-        public static void SendIcmp(Socket socket, IPAddress destination, ushort id, ushort seq)
+        public static void SendPacket(Socket socket, IPAddress destination, ushort id, ushort seq)
         {
             byte[] packet = new byte[8];
 
             packet[0] = 8;  // Type = Echo Request
             packet[1] = 0;  // Code
-            packet[2] = 0;  // Checksum (пока 0)
+            packet[2] = 0;  // Checksum
             packet[3] = 0;
 
             packet[4] = (byte)(id >> 8);
